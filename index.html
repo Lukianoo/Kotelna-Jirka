@@ -3,71 +3,96 @@
 <head>
 <meta charset="UTF-8">
 <title>Panel kotelny</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <style>
+:root {
+    --bg: #020617;
+    --panel: #020617;
+    --text: #e5e7eb;
+    --muted: #94a3b8;
+}
+* { box-sizing: border-box; }
+
 body {
     margin: 0;
-    font-family: "Segoe UI", sans-serif;
+    font-family: "Segoe UI", system-ui;
     background: #0f172a;
-    color: #e5e7eb;
+    color: var(--text);
 }
+
+/* HEADER */
 header {
-    background: #020617;
-    padding: 15px 30px;
+    background: var(--bg);
+    padding: 12px 16px;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    border-bottom: 2px solid #1e293b;
+    border-bottom: 1px solid #1e293b;
 }
 h1 {
     margin: 0;
-    font-size: 22px;
+    font-size: 18px;
 }
 .time {
+    font-size: 12px;
     text-align: right;
-    font-size: 14px;
-    color: #94a3b8;
+    color: var(--muted);
 }
+
+/* BUTTONS */
+button {
+    background: #1e293b;
+    color: var(--text);
+    border: none;
+    padding: 6px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+}
+
+/* CONTENT */
 .container {
-    padding: 25px;
+    padding: 14px;
 }
 .cards {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px,1fr));
-    gap: 20px;
+    grid-template-columns: repeat(auto-fit, minmax(150px,1fr));
+    gap: 12px;
 }
 .card {
-    background: #020617;
-    border-radius: 12px;
-    padding: 20px;
-    box-shadow: 0 0 25px rgba(0,0,0,0.4);
+    background: var(--panel);
+    border-radius: 14px;
+    padding: 14px;
+    box-shadow: 0 0 20px rgba(0,0,0,.4);
 }
 .card h2 {
+    font-size: 13px;
     margin: 0;
-    font-size: 15px;
-    color: #94a3b8;
+    color: var(--muted);
 }
 .value {
-    font-size: 36px;
-    margin-top: 10px;
+    font-size: 28px;
+    margin-top: 6px;
 }
 .unit {
-    font-size: 16px;
-    color: #94a3b8;
+    font-size: 14px;
+    color: var(--muted);
 }
+
+/* GRAPH */
 canvas {
-    background: #020617;
-    border-radius: 12px;
-    padding: 15px;
+    margin-top: 14px;
+    background: var(--panel);
+    border-radius: 14px;
+    padding: 10px;
 }
-.footer {
-    margin-top: 10px;
-    font-size: 13px;
-    color: #64748b;
-    text-align: right;
+
+/* MOBILE */
+@media (max-width: 600px) {
+    h1 { font-size: 16px; }
+    .value { font-size: 24px; }
 }
 </style>
 </head>
@@ -78,7 +103,8 @@ canvas {
     <h1>🔥 Panel kotelny</h1>
     <div class="time">
         <div id="now"></div>
-        <div>Poslední aktualizace: <span id="lastUpdate">–</span></div>
+        <div>Aktualizace: <span id="lastUpdate">–</span></div>
+        <button onclick="toggleFullscreen()">⛶ Fullscreen</button>
     </div>
 </header>
 
@@ -86,43 +112,43 @@ canvas {
 
 <div class="cards">
     <div class="card">
-        <h2>Teplota na kotli</h2>
+        <h2>Kotel</h2>
         <div class="value"><span id="kotel">–</span><span class="unit"> °C</span></div>
     </div>
 
     <div class="card">
-        <h2>Teplota bojler</h2>
+        <h2>Bojler</h2>
         <div class="value"><span id="bojler">–</span><span class="unit"> °C</span></div>
     </div>
 
     <div class="card">
-        <h2>Teplota venku</h2>
+        <h2>Venku</h2>
         <div class="value"><span id="venku">–</span><span class="unit"> °C</span></div>
     </div>
 
     <div class="card">
-        <h2>Spotřeba ohřevu bojleru (24h)</h2>
+        <h2>Spotřeba 24h</h2>
         <div class="value"><span id="energie">–</span><span class="unit"> kWh</span></div>
+    </div>
+
+    <div class="card">
+        <h2>COP / účinnost</h2>
+        <div class="value"><span id="cop">–</span></div>
     </div>
 </div>
 
-<br>
-
-<canvas id="chart" height="120"></canvas>
-
-<div class="footer">
-    Data: ThingSpeak ID 1957585
-</div>
+<canvas id="chart" height="140"></canvas>
 
 </div>
 
 <script>
+/* ==== NASTAVENÍ ==== */
 const CHANNEL = 1957585;
-const URL = `https://api.thingspeak.com/channels/${CHANNEL}/feeds.json?results=288`;
+const BOJLER_L = 120;
+const C = 4.186;
+const PRIKON_KOTLE_KW = 6;
 
-const BOJLER_OBJEM_L = 120; // změň dle skutečnosti
-const C = 4.186; // kJ/kg·K
-
+/* ==== ČAS ==== */
 function updateTime() {
     document.getElementById("now").innerText =
         new Date().toLocaleString("cs-CZ");
@@ -130,46 +156,53 @@ function updateTime() {
 setInterval(updateTime, 1000);
 updateTime();
 
-fetch(URL)
+/* ==== FULLSCREEN ==== */
+function toggleFullscreen() {
+    if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen();
+    } else {
+        document.exitFullscreen();
+    }
+}
+
+/* ==== DATA ==== */
+fetch(`https://api.thingspeak.com/channels/${CHANNEL}/feeds.json?results=288`)
 .then(r => r.json())
 .then(data => {
     const feeds = data.feeds;
+    const last = feeds.at(-1);
 
-    const last = feeds[feeds.length - 1];
-    document.getElementById("kotel").innerText = Number(last.field1).toFixed(1);
-    document.getElementById("bojler").innerText = Number(last.field2).toFixed(1);
-    document.getElementById("venku").innerText = Number(last.field3).toFixed(1);
+    document.getElementById("kotel").innerText = (+last.field1).toFixed(1);
+    document.getElementById("bojler").innerText = (+last.field2).toFixed(1);
+    document.getElementById("venku").innerText = (+last.field3).toFixed(1);
     document.getElementById("lastUpdate").innerText =
         new Date(last.created_at).toLocaleString("cs-CZ");
 
-    // 24h data
     const labels = feeds.map(f => new Date(f.created_at).toLocaleTimeString("cs-CZ"));
-    const kotel = feeds.map(f => Number(f.field1));
-    const bojler = feeds.map(f => Number(f.field2));
-    const venku = feeds.map(f => Number(f.field3));
+    const bojler = feeds.map(f => +f.field2);
 
-    // Výpočet energie
-    const T1 = bojler[0];
-    const T2 = bojler[bojler.length - 1];
-    const dT = Math.max(T2 - T1, 0);
-    const energie = (BOJLER_OBJEM_L * C * dT) / 3600;
-    document.getElementById("energie").innerText = energie.toFixed(2);
+    /* ENERGIE */
+    const dT = Math.max(bojler.at(-1) - bojler[0], 0);
+    const teplo_kWh = (BOJLER_L * C * dT) / 3600;
+    document.getElementById("energie").innerText = teplo_kWh.toFixed(2);
 
-    new Chart(document.getElementById("chart"), {
+    /* COP */
+    const el_kWh = PRIKON_KOTLE_KW * 24;
+    const cop = teplo_kWh / el_kWh;
+    document.getElementById("cop").innerText = cop.toFixed(2);
+
+    new Chart(chart, {
         type: "line",
         data: {
             labels,
             datasets: [
-                { label: "Kotel", data: kotel, borderColor: "#f97316", tension: 0.3 },
-                { label: "Bojler", data: bojler, borderColor: "#38bdf8", tension: 0.3 },
-                { label: "Venku", data: venku, borderColor: "#22c55e", tension: 0.3 }
+                { label: "Kotel", data: feeds.map(f=>+f.field1), borderColor: "#f97316", tension:.3 },
+                { label: "Bojler", data: bojler, borderColor: "#38bdf8", tension:.3 },
+                { label: "Venku", data: feeds.map(f=>+f.field3), borderColor: "#22c55e", tension:.3 }
             ]
         },
         options: {
-            responsive: true,
-            plugins: {
-                legend: { labels: { color: "#e5e7eb" } }
-            },
+            plugins: { legend: { labels: { color: "#e5e7eb" } } },
             scales: {
                 x: { ticks: { color: "#94a3b8" } },
                 y: { ticks: { color: "#94a3b8" } }
